@@ -58,37 +58,58 @@ def main():
     existing_taxids = set()
 
     rows = []
-    try:
-        with open(args.input_file, 'r', newline='', encoding='utf-8') as f:
-            reader = csv.reader(f, delimiter=';')
-            header = next(reader)
 
-            # Find indices
+    def read_csv_with_fallback(filepath):
+        encodings = ['utf-8', 'latin-1', 'cp1252']
+        for enc in encodings:
             try:
-                taxid_idx = header.index("TaxId")
-                organism_idx = header.index("Organism")
+                with open(filepath, 'r', newline='', encoding=enc) as f:
+                    # Read entire file to force decoding check
+                    return list(csv.reader(f, delimiter=';'))
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                raise e
+        raise ValueError(f"Could not decode file {filepath} with encodings: {encodings}")
 
-                # Verify indices based on name might be ambiguous for "Rank".
-                # Let's find all indices for "Rank"
-                rank_indices = [i for i, x in enumerate(header) if x == "Rank"]
-                if len(rank_indices) >= 2:
-                    rank_numeric_idx = rank_indices[0]
-                    rank_tax_idx = rank_indices[1]
-                else:
-                    # Fallback or error
-                    rank_numeric_idx = 0
-                    rank_tax_idx = 4 # Guessing from example if header names don't match exactly
+    try:
+        all_rows = read_csv_with_fallback(args.input_file)
+        if not all_rows:
+            print("File is empty.")
+            sys.exit(1)
 
-            except ValueError as e:
-                print(f"Error parsing header: {e}")
-                sys.exit(1)
+        header = all_rows[0]
 
-            for row in reader:
-                rows.append(row)
-                if len(row) > taxid_idx:
-                    existing_taxids.add(row[taxid_idx])
+        # Find indices
+        try:
+            taxid_idx = header.index("TaxId")
+            organism_idx = header.index("Organism")
+
+            # Verify indices based on name might be ambiguous for "Rank".
+            # Let's find all indices for "Rank"
+            rank_indices = [i for i, x in enumerate(header) if x == "Rank"]
+            if len(rank_indices) >= 2:
+                rank_numeric_idx = rank_indices[0]
+                rank_tax_idx = rank_indices[1]
+            else:
+                # Fallback or error
+                rank_numeric_idx = 0
+                rank_tax_idx = 4 # Guessing from example if header names don't match exactly
+
+        except ValueError as e:
+            print(f"Error parsing header: {e}")
+            sys.exit(1)
+
+        for row in all_rows[1:]:
+            rows.append(row)
+            if len(row) > taxid_idx:
+                existing_taxids.add(row[taxid_idx])
+
     except FileNotFoundError:
         print(f"File {args.input_file} not found.")
+        sys.exit(1)
+    except ValueError as e:
+        print(e)
         sys.exit(1)
 
     # Process
