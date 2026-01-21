@@ -30,7 +30,22 @@ def main():
     dfs = []
     for f in file_list:
         try:
-            df = pd.read_csv(f, sep='\t')
+            # Try reading with tab separator first, handling comments
+            try:
+                df = pd.read_csv(f, sep='\t', comment='#')
+            except Exception:
+                # If that fails, try whitespace separator
+                try:
+                    df = pd.read_csv(f, sep=r'\s+', comment='#')
+                except Exception:
+                     # If both fail, raise the original error or a generic one
+                     raise ValueError("Could not parse file with tab or whitespace separator.")
+
+            # Check if we got a reasonable dataframe (more than 1 column)
+            if df.shape[1] < 2:
+                 # Retry with engine='python' which is more robust for some separators
+                 df = pd.read_csv(f, sep=None, engine='python', comment='#')
+
             df.columns = df.columns.str.strip()
 
             required_cols = ['name', 'kraken_assigned_reads', 'added_reads', 'new_est_reads', 'fraction_total_reads']
